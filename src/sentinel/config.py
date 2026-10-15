@@ -33,6 +33,7 @@ class Settings:
     pool_max_size: int
     host: str
     port: int
+    workers: int
     log_level: str
 
     def require_database_url(self) -> str:
@@ -56,6 +57,7 @@ class Settings:
             pool_max_size=_int(env, "SENTINEL_POOL_MAX_SIZE", 20),
             host=env.get("SENTINEL_HOST", "127.0.0.1"),
             port=_int(env, "SENTINEL_PORT", 8000),
+            workers=_int(env, "SENTINEL_WORKERS", 1),
             log_level=env.get("SENTINEL_LOG_LEVEL", "INFO").upper(),
         )
         if settings.pool_min_size > settings.pool_max_size:

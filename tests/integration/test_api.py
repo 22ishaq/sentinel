@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from starlette.testclient import TestClient
 
-from sentinel.api import MAX_BODY_BYTES, create_app
+from sentinel.api import MAX_BODY_BYTES, app_from_env, create_app
 from sentinel.service import DecisionService
 from sentinel.store.db import Pool, create_pool
 from tests import support
@@ -235,3 +235,14 @@ def test_unexpected_errors_are_a_generic_500(service: DecisionService) -> None:
     assert response.status_code == 500
     assert _error_code(response) == "INTERNAL_ERROR"
     assert "secret" not in response.text
+
+
+def test_the_production_factory_builds_a_working_app(
+    migrated_url: str, pool: Pool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SENTINEL_DATABASE_URL", migrated_url)
+    monkeypatch.setenv("SENTINEL_POOL_MIN_SIZE", "1")
+    monkeypatch.setenv("SENTINEL_POOL_MAX_SIZE", "2")
+    with TestClient(app_from_env()) as client:
+        assert client.get("/readyz").status_code == 200
+        assert _post(client, support.event()).status_code == 201

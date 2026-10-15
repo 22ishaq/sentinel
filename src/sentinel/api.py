@@ -19,9 +19,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
+from sentinel.config import Settings
 from sentinel.domain import parse_json
 from sentinel.errors import ErrorCode, SentinelError, ValidationError
+from sentinel.logs import configure_logging
+from sentinel.rules import load_ruleset_file
 from sentinel.service import DecisionService
+from sentinel.store.db import create_pool
 
 MAX_BODY_BYTES: Final = 16 * 1024
 
@@ -140,3 +144,19 @@ def pool_lifespan(
             close()
 
     return lifespan
+
+
+def app_from_env() -> Starlette:
+    """ASGI factory (``uvicorn --factory sentinel.api:app_from_env``): one pool per worker."""
+    settings = Settings.from_env()
+    configure_logging(settings.log_level)
+    pool = create_pool(
+        settings.require_database_url(),
+        min_size=settings.pool_min_size,
+        max_size=settings.pool_max_size,
+    )
+    service = DecisionService(
+        pool, load_ruleset_file(settings.ruleset_path), budget_ms=settings.budget_ms
+    )
+    service.register_ruleset()
+    return create_app(service, lifespan=pool_lifespan(pool.close))

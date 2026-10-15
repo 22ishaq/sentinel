@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check --output-format=github .
+      - run: ruff format --check .
+
+  types:
+    name: Types (mypy --strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: mypy
+
+  test:
+    name: Tests (Python ${{ matrix.python }}, PostgreSQL 17)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: sentinel
+          POSTGRES_PASSWORD: sentinel
+          POSTGRES_DB: sentinel_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sentinel -d sentinel_test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      SENTINEL_TEST_DATABASE_URL: postgresql://sentinel:sentinel@localhost:5432/sentinel_test
+      SENTINEL_REQUIRE_DB: "1"
+      HYPOTHESIS_PROFILE: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: pytest (coverage floor 80%)
+        run: pytest --cov --cov-report=term-missing:skip-covered
+      - name: Summary
+        if: always()
+        run: |
+          total=$(pytest --collect-only -q | tail -1 | grep -oE '^[0-9]+')
+          db=$(pytest -m db --collect-only -q | tail -1 | grep -oE '^[0-9]+')
+          echo "**${total} tests, ${db} of them against real PostgreSQL 17**" >> "$GITHUB_STEP_SUMMARY"
+
+  docker:
+    name: Docker image + compose smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start the stack
+        run: docker compose up --build --detach
+      - name: Smoke test
+        run: ./scripts/smoke.sh
+      - name: Relay published the decisions
+        run: |
+          sleep 2
+          docker compose logs relay | grep -q '"topic":"decision.made"'
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Tear down
+        if: always()
+        run: docker compose down --volumes

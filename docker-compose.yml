@@ -1,0 +1,54 @@
+# Local stack: PostgreSQL, a one-shot migration, the API and the outbox relay.
+#   docker compose up --build        then   ./scripts/smoke.sh
+name: sentinel
+
+x-sentinel: &sentinel
+  build: .
+  image: sentinel:local
+  environment:
+    SENTINEL_DATABASE_URL: postgresql://sentinel:sentinel@postgres:5432/sentinel
+    SENTINEL_DECISION_BUDGET_MS: "50"
+    SENTINEL_LOG_LEVEL: INFO
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: sentinel
+      POSTGRES_DB: sentinel
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  migrate:
+    <<: *sentinel
+    command: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *sentinel
+    command: ["serve", "--workers", "2"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  relay:
+    <<: *sentinel
+    command: ["relay", "--sink", "stdout"]
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

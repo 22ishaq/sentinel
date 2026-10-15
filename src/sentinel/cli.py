@@ -30,6 +30,9 @@ def _parser() -> argparse.ArgumentParser:
     serve = commands.add_parser("serve", help="run the HTTP API")
     serve.add_argument("--host", help="bind address (default: SENTINEL_HOST or 127.0.0.1)")
     serve.add_argument("--port", type=int, help="port (default: SENTINEL_PORT or 8000)")
+    serve.add_argument(
+        "--workers", type=int, help="worker processes (default: SENTINEL_WORKERS or 1)"
+    )
 
     relay = commands.add_parser("relay", help="publish outbox events")
     relay.add_argument("--sink", choices=["stdout", "webhook"], default="stdout")
@@ -55,29 +58,21 @@ def _migrate() -> int:
     return 0
 
 
-def _serve(host: str | None, port: int | None) -> int:
+def _serve(host: str | None, port: int | None, workers: int | None) -> int:
     import uvicorn
 
-    from sentinel.api import create_app, pool_lifespan
     from sentinel.config import Settings
-    from sentinel.service import DecisionService
-    from sentinel.store.db import create_pool
 
     settings = Settings.from_env()
     configure_logging(settings.log_level)
-    ruleset = load_ruleset_file(settings.ruleset_path)
-    pool = create_pool(
-        settings.require_database_url(),
-        min_size=settings.pool_min_size,
-        max_size=settings.pool_max_size,
-    )
-    service = DecisionService(pool, ruleset, budget_ms=settings.budget_ms)
-    service.register_ruleset()
-    app = create_app(service, lifespan=pool_lifespan(pool.close))
+    settings.require_database_url()  # fail before forking workers, not inside each one
+    load_ruleset_file(settings.ruleset_path)
     uvicorn.run(
-        app,
+        "sentinel.api:app_from_env",
+        factory=True,
         host=host or settings.host,
         port=port or settings.port,
+        workers=workers or settings.workers,
         log_config=None,
         access_log=False,
     )
@@ -154,7 +149,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             case "migrate":
                 return _migrate()
             case "serve":
-                return _serve(args.host, args.port)
+                return _serve(args.host, args.port, args.workers)
             case "relay":
                 return _relay(args.sink, args.webhook_url, args.once)
             case "verify":
