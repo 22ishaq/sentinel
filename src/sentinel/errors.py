@@ -32,6 +32,8 @@ class ErrorCode(StrEnum):
     REQUEST_MALFORMED_JSON = "REQUEST_MALFORMED_JSON"
     REQUEST_TOO_LARGE = "REQUEST_TOO_LARGE"
     REQUEST_UNSUPPORTED_MEDIA_TYPE = "REQUEST_UNSUPPORTED_MEDIA_TYPE"
+    ROUTE_NOT_FOUND = "ROUTE_NOT_FOUND"
+    METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED"
 
     # Transaction event validation
     EVENT_NOT_AN_OBJECT = "EVENT_NOT_AN_OBJECT"
@@ -46,6 +48,7 @@ class ErrorCode(StrEnum):
     DECISION_NOT_FOUND = "DECISION_NOT_FOUND"
 
     # Configuration and operations
+    SETTINGS_INVALID = "SETTINGS_INVALID"
     RULESET_INVALID = "RULESET_INVALID"
     MIGRATION_CHECKSUM_MISMATCH = "MIGRATION_CHECKSUM_MISMATCH"
     STORE_UNAVAILABLE = "STORE_UNAVAILABLE"
@@ -66,6 +69,8 @@ HTTP_STATUS: Final[Mapping[ErrorCode, int]] = {
     ErrorCode.REQUEST_MALFORMED_JSON: 400,
     ErrorCode.REQUEST_TOO_LARGE: 413,
     ErrorCode.REQUEST_UNSUPPORTED_MEDIA_TYPE: 415,
+    ErrorCode.ROUTE_NOT_FOUND: 404,
+    ErrorCode.METHOD_NOT_ALLOWED: 405,
     ErrorCode.EVENT_NOT_AN_OBJECT: 422,
     ErrorCode.EVENT_FIELD_MISSING: 422,
     ErrorCode.EVENT_FIELD_UNKNOWN: 422,
@@ -74,6 +79,7 @@ HTTP_STATUS: Final[Mapping[ErrorCode, int]] = {
     ErrorCode.EVENT_TIMESTAMP_IN_FUTURE: 422,
     ErrorCode.IDEMPOTENCY_CONFLICT: 409,
     ErrorCode.DECISION_NOT_FOUND: 404,
+    ErrorCode.SETTINGS_INVALID: 500,
     ErrorCode.RULESET_INVALID: 500,
     ErrorCode.MIGRATION_CHECKSUM_MISMATCH: 500,
     ErrorCode.STORE_UNAVAILABLE: 503,
@@ -102,9 +108,7 @@ class SentinelError(Exception):
 
     def with_details(self, **extra: JsonValue) -> SentinelError:
         """Return a copy of this error (same class and code) with extra context merged in."""
-        clone = type(self)(self.code, self.message, details={**self.details, **extra})
-        clone.__cause__ = self
-        return clone
+        return type(self)(self.code, self.message, details={**self.details, **extra})
 
     def to_dict(self) -> dict[str, JsonValue]:
         return {"code": self.code.value, "message": self.message, "details": self.details}

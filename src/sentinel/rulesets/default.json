@@ -1,0 +1,57 @@
+{
+  "name": "default",
+  "description": "Example card-payment ruleset: hard blocks first, then velocity, then review triggers. Thresholds and lists are illustrative, not advice.",
+  "fallback_outcome": "REVIEW",
+  "rules": [
+    {
+      "id": "blocked_merchant_country",
+      "type": "merchant_country",
+      "outcome": "DECLINE",
+      "countries": ["CU", "IR", "KP"]
+    },
+    {
+      "id": "blocked_merchant_category",
+      "type": "merchant_category",
+      "outcome": "DECLINE",
+      "categories": ["7995"]
+    },
+    {
+      "id": "amount_ceiling",
+      "type": "amount_above",
+      "outcome": "DECLINE",
+      "limits": {"GBP": "10000.00", "EUR": "11500.00", "USD": "12500.00", "JPY": "1900000", "KWD": "3800.000"}
+    },
+    {
+      "id": "daily_spend_limit",
+      "type": "spend_velocity",
+      "outcome": "DECLINE",
+      "window_seconds": 86400,
+      "limits": {"GBP": "5000.00", "EUR": "5750.00", "USD": "6250.00", "JPY": "950000", "KWD": "1900.000"}
+    },
+    {
+      "id": "rapid_attempts",
+      "type": "attempt_velocity",
+      "outcome": "REVIEW",
+      "window_seconds": 300,
+      "max_prior_attempts": 5
+    },
+    {
+      "id": "high_value",
+      "type": "amount_above",
+      "outcome": "REVIEW",
+      "limits": {"GBP": "1000.00", "EUR": "1150.00", "USD": "1250.00", "JPY": "190000", "KWD": "380.000"}
+    },
+    {
+      "id": "large_first_payment_to_merchant",
+      "type": "new_merchant_amount",
+      "outcome": "REVIEW",
+      "limits": {"GBP": "250.00", "EUR": "290.00", "USD": "310.00", "JPY": "47500", "KWD": "95.000"}
+    },
+    {
+      "id": "cross_border_ecommerce",
+      "type": "cross_border",
+      "outcome": "REVIEW",
+      "channels": ["ecommerce"]
+    }
+  ]
+}

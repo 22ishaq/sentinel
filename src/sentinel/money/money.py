@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Final
 
-from sentinel.errors import ErrorCode, MoneyError, preview
+from sentinel.errors import ErrorCode, JsonValue, MoneyError, preview
 from sentinel.money.iso4217 import CURRENCIES, Currency
 
 MAX_DIGITS: Final = 38
@@ -41,6 +41,13 @@ def currency(code: object) -> Currency:
             details={"currency": code},
         )
     return found
+
+
+def transactable_currency(code: object) -> Currency:
+    """Resolve a code that can carry an amount (i.e. not XAU, XDR, XXX and similar)."""
+    cur = currency(code)
+    _exponent(cur)
+    return cur
 
 
 def _exponent(cur: Currency) -> int:
@@ -97,7 +104,7 @@ class Money:
         whole, frac = divmod(abs(self.minor_units), 10**exponent)
         return f"{sign}{whole}.{frac:0{exponent}d}" if exponent else f"{sign}{whole}"
 
-    def to_json(self) -> dict[str, str]:
+    def to_json(self) -> dict[str, JsonValue]:
         return {"amount": self.format(), "currency": self.currency.code}
 
     def __str__(self) -> str:
