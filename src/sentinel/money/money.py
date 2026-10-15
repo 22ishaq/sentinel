@@ -192,17 +192,34 @@ def _parse_exact(amount: object) -> Decimal:
 
 
 def _to_minor_units(value: Decimal, cur: Currency) -> int:
-    scaled = value * (10 ** _exponent(cur))
-    if scaled != scaled.to_integral_value():
+    """Scale a major-unit value to minor units using integer arithmetic only.
+
+    Multiplying the Decimal by ``10**exponent`` would run in the active decimal context,
+    which keeps 28 significant digits by default: wider amounts were silently rounded
+    (found by the round-trip properties in ``tests/unit/test_money_properties.py``).
+    Working on the digit string makes the result exact at any width, and checking the
+    magnitude first means a hostile exponent such as ``1E+999999`` costs nothing.
+    """
+    exponent = _exponent(cur)
+    sign, digit_tuple, power = value.as_tuple()
+    if not isinstance(power, int):  # pragma: no cover - _parse_exact only admits finite values
+        raise MoneyError(ErrorCode.MONEY_NOT_FINITE, "amount must be a finite number")
+    digits = "".join(map(str, digit_tuple)).lstrip("0")
+    if not digits:
+        return 0
+    significant = digits.rstrip("0")
+    shift = power + (len(digits) - len(significant)) + exponent
+    if shift < 0:
         raise MoneyError(
             ErrorCode.MONEY_PRECISION_EXCEEDED,
-            f"{cur.code} has {cur.minor_unit} decimal places; refusing to round",
-            details={"currency": cur.code, "minor_unit": cur.minor_unit},
+            f"{cur.code} has {exponent} decimal places; refusing to round",
+            details={"currency": cur.code, "minor_unit": exponent},
         )
-    minor = int(scaled)
-    if abs(minor) > MAX_MINOR_UNITS:
+    if len(significant) + shift > MAX_DIGITS:
         raise _out_of_range(cur)
-    return minor
+    scale: int = 10**shift
+    magnitude = int(significant) * scale
+    return -magnitude if sign else magnitude
 
 
 def normalise(amount: object, currency_code: str | Currency) -> Money:

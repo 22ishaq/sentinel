@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from enum import StrEnum
 from typing import Final
 
-type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
+type JsonValue = str | int | float | bool | list[JsonValue] | dict[str, JsonValue] | None
 
 
 class ErrorCode(StrEnum):

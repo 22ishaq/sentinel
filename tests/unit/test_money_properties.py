@@ -23,7 +23,9 @@ monies = st.builds(Money, minor_units, currencies)
 
 
 def _same_currency_pair(cur: Currency) -> st.SearchStrategy[tuple[Money, Money]]:
-    return st.tuples(st.builds(Money, minor_units, st.just(cur)), st.builds(Money, minor_units, st.just(cur)))
+    return st.tuples(
+        st.builds(Money, minor_units, st.just(cur)), st.builds(Money, minor_units, st.just(cur))
+    )
 
 
 @given(monies)
@@ -52,14 +54,20 @@ def test_digits_beyond_the_minor_unit_are_rejected_never_rounded(
     assert caught.value.code is ErrorCode.MONEY_PRECISION_EXCEEDED
 
 
+def _attempt(amount: object, cur: Currency | str) -> Money | ErrorCode:
+    try:
+        return normalise(amount, cur)
+    except MoneyError as error:
+        return error.code
+
+
 @given(st.decimals(allow_nan=False, allow_infinity=False), currencies)
 def test_accepted_decimals_are_represented_exactly(value: Decimal, cur: Currency) -> None:
-    try:
-        money = normalise(value, cur)
-    except MoneyError as error:
-        assert error.code in {ErrorCode.MONEY_PRECISION_EXCEEDED, ErrorCode.MONEY_OUT_OF_RANGE}
+    result = _attempt(value, cur)
+    if isinstance(result, Money):
+        assert result.to_decimal() == value
     else:
-        assert money.to_decimal() == value
+        assert result in {ErrorCode.MONEY_PRECISION_EXCEEDED, ErrorCode.MONEY_OUT_OF_RANGE}
 
 
 @given(st.floats(allow_nan=True, allow_infinity=True), currencies)
@@ -71,16 +79,15 @@ def test_floats_are_always_rejected(value: float, cur: Currency) -> None:
 
 @given(st.text(max_size=120))
 def test_arbitrary_text_is_accepted_or_rejected_with_a_typed_error(text: str) -> None:
-    try:
-        money = normalise(text, "GBP")
-    except MoneyError as error:
-        assert error.code in {
+    result = _attempt(text, "GBP")
+    if isinstance(result, Money):
+        assert result.to_decimal() == Decimal(text)
+    else:
+        assert result in {
             ErrorCode.MONEY_MALFORMED,
             ErrorCode.MONEY_PRECISION_EXCEEDED,
             ErrorCode.MONEY_OUT_OF_RANGE,
         }
-    else:
-        assert money.to_decimal() == Decimal(text)
 
 
 @given(currencies.flatmap(_same_currency_pair))
